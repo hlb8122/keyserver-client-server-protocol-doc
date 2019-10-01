@@ -1,1 +1,1 @@
-# keyserver-client-server-protocol-doc
+# Cash:web Keyserver - Pay-for-Put Protocol Documentation
