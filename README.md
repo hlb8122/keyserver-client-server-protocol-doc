@@ -67,10 +67,10 @@ message Metadata  {
 
 ### Initial PUT
 
-To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/:address`. 
+To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/{address}`. 
 
 * Headers and body MUST NOT be included.
-* Addresses MAY be given in cashaddr or base58 format.
+* Addresses MAY be given in P2PKH [cashaddr](https://www.bitcoincash.org/spec/cashaddr.html) or base58 format.
 * Addresses MUST include checksums and prefixes.
 * If a keyserver is accepting payments from the main, test or regtest network they MUST only deem the corresponding addresses valid. This is to avoid confusion and ensure that main and testing networks stay segregated.
 * The address MUST be a valid Bitcoin Cash address.
@@ -101,7 +101,8 @@ message PaymentRequest {
 
 Details can be found in the "PaymentDetails/PaymentRequest" section of [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki).
 
-** WIP **
+**WIP**
+
 In addition to [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements we the keyserver MUST incude an `OP_RETURN` output in the `outputs` field given by...Rationale for this can be found in later sections.
 
 ### Payment and Token Issuance
