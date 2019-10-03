@@ -8,14 +8,14 @@ Traditional keyservers are subject to certificate spamming attacks. To prevent t
 
 The protocol sits ontop of HTTP and makes use of REST API semantics. It closely follows the [BIP70 protocol](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and, as such, prior knowledge of it is recommended.
 
-It is to be noted that [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) must be suplemented with [BIP71](https://github.com/bitcoin/bips/blob/master/bip-0071.mediawiki) and [BIP72](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki), and that both take on has a slightly altered form form for Bitcoin Cash documented [here](https://lists.linuxfoundation.org/pipermail/bitcoin-ml/2017-August/000177.html). We refer to this group of BIP's as BIP70 from hereon after.
+It is to be noted that [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) must be suplemented with [BIP71](https://github.com/bitcoin/bips/blob/master/bip-0071.mediawiki) and [BIP72](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki), and that both take on a [slightly altered](https://lists.linuxfoundation.org/pipermail/bitcoin-ml/2017-August/000177.html) form for Bitcoin Cash. We refer to this group of BIP's as BIP70 from hereon after.
 
 The protocol's messages are encoded via [Google's Protocol Buffers](https://developers.google.com/protocol-buffers), authenticated using [X.509 certificates](https://tools.ietf.org/html/rfc5280), and communicated over HTTP/HTTPS.
 
 The protcol consists of three round-trips:
-* An initial PUT with empty body, responded to by a BIP70 payment request,
-* A POST containing payment, responded to with a BIP70 payment acknowledgement and a token,
-* A PUT containing signed metadata and the token, responded to by a upload acknowledgement
+1. An initial PUT with empty body, responded to by a BIP70 payment request,
+2. A POST containing payment, responded to with a BIP70 payment acknowledgement and a token,
+3. A PUT containing signed metadata and the token, responded to by a upload acknowledgement
 
 ### Protocol Buffer Messages
 
@@ -65,7 +65,7 @@ message Metadata  {
 }
 ```
 
-### Initial PUT
+### 1 - Initial PUT
 
 To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/{address}`. 
 
@@ -105,9 +105,9 @@ Details can be found in the "PaymentDetails/PaymentRequest" section of [BIP70](h
 
 In addition to [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements we the keyserver MUST incude an `OP_RETURN` output in the `outputs` field given by...Rationale for this can be found in later sections.
 
-### Payment and Token Issuance
+### 2 - Payment and Token Issuance
 
-### Metadata Submission
+### 3 - Metadata Submission
 
 ## Rationale
 
