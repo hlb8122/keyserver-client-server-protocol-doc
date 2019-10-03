@@ -8,12 +8,14 @@ Traditional keyservers are subject to certificate spamming attacks. To prevent t
 
 The protocol sits ontop of HTTP and makes use of REST API semantics. It closely follows the [BIP70 protocol](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and, as such, prior knowledge of it is recommended.
 
-The protocol messages are encoded via [Google's Protocol Buffers](https://developers.google.com/protocol-buffers), authenticated using [X.509 certificates](https://tools.ietf.org/html/rfc5280), and communicated over HTTP/HTTPS.
+It is to be noted that [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) must be suplemented with [BIP71](https://github.com/bitcoin/bips/blob/master/bip-0071.mediawiki) and [BIP72](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki), and that both take on has a slightly altered form form for Bitcoin Cash documented [here](https://lists.linuxfoundation.org/pipermail/bitcoin-ml/2017-August/000177.html). We refer to this group of BIP's as BIP70 from hereon after.
+
+The protocol's messages are encoded via [Google's Protocol Buffers](https://developers.google.com/protocol-buffers), authenticated using [X.509 certificates](https://tools.ietf.org/html/rfc5280), and communicated over HTTP/HTTPS.
 
 The protcol consists of three round-trips:
 * An initial PUT with empty body, responded to by a BIP70 payment request,
-* a POST containing payment, responded to with a BIP70 payment acknowledgement and a token,
-* a PUT containing signed metadata and the token, responded to by a upload acknowledgement
+* A POST containing payment, responded to with a BIP70 payment acknowledgement and a token,
+* A PUT containing signed metadata and the token, responded to by a upload acknowledgement
 
 ### Protocol Buffer Messages
 
@@ -63,11 +65,58 @@ message Metadata  {
 }
 ```
 
+### Initial PUT
+
+To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/:address`. 
+
+* Headers and body MUST NOT be included.
+* Addresses MAY be given in cashaddr or base58 format.
+* Addresses MUST include checksums and prefixes.
+* If a keyserver is accepting payments from the main, test or regtest network they MUST only deem the corresponding addresses valid. This is to avoid confusion and ensure that main and testing networks stay segregated.
+* The address MUST be a valid Bitcoin Cash address.
+
+Any failure to meet the above criteria SHOULD be responded to with status code `400` and an appropriate error message.
+
+A successful request MUST be responded to with a status code `402` and the payment request message defined in BIP70.
+
+```protobuf
+message PaymentDetails {
+        optional string network = 1 [default = "main"]; // "main" or "test"
+        repeated Output outputs = 2;        // Where payment should be sent
+        required uint64 time = 3;           // Timestamp; when payment request created
+        optional uint64 expires = 4;        // Timestamp; when this request should be considered invalid
+        optional string memo = 5;           // Human-readable description of request for the customer
+        optional string payment_url = 6;    // URL to send Payment and get PaymentACK
+        optional bytes merchant_data = 7;   // Arbitrary data to include in the Payment message
+}
+
+message PaymentRequest {
+        optional uint32 payment_details_version = 1 [default = 1];
+        optional string pki_type = 2 [default = "none"];  // none / x509+sha256 / x509+sha1
+        optional bytes pki_data = 3;                      // depends on pki_type
+        required bytes serialized_payment_details = 4;    // PaymentDetails
+        optional bytes signature = 5;                     // pki-dependent signature
+}
+```
+
+Details can be found in the "PaymentDetails/PaymentRequest" section of [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki).
+
+** WIP **
+In addition to [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements we the keyserver MUST incude an `OP_RETURN` output in the `outputs` field given by...Rationale for this can be found in later sections.
+
+### Payment and Token Issuance
+
+### Metadata Submission
+
 ## Rationale
+
+### BIP70
+
+### Required OP_RETURN Data
 
 ### Statelessness
 
-### BIP70
+### Independence from P2P network protocol
 
 ## Reference Implementations
 
