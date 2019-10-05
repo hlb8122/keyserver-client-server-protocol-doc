@@ -12,7 +12,7 @@ Traditional keyservers are subject to certificate spamming attacks.
 
 ## Specification
 
-The protocol sits ontop of HTTP and makes use of REST API semantics. It closely follows the [BIP70 protocol](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and, as such, prior knowledge of it is recommended.
+The protocol sits ontop of HTTP and makes use of REST API semantics. It closely follows the [BIP 70 protocol](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and, as such, prior knowledge of it is recommended.
 
 It is to be noted that [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) must be suplemented with [BIP71](https://github.com/bitcoin/bips/blob/master/bip-0071.mediawiki) and [BIP72](https://github.com/bitcoin/bips/blob/master/bip-0072.mediawiki), and that both take on a [slightly altered](https://lists.linuxfoundation.org/pipermail/bitcoin-ml/2017-August/000177.html) form for Bitcoin Cash. We refer to this this collection of BIPs as [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) from hereon after.
 
@@ -34,13 +34,13 @@ message Header {
     string value = 2;
 }
 
-// MetadataField is an indidual piece of structured data provided by wallet authors.
+// Entry is an individual piece of structured data provided by wallet authors.
 message Entry {
-    // Format is a hint to wallets as to what type of data to deserialize from the metadata field.
+    // Format is a hint to wallets as to what type of data to deserialize from the entry.
     string format = 1;
     // The headers is excess metadata that may be useful to a wallet.
     repeated Header headers = 2;
-    // Body of the metadata field.
+    // Body of the entry.
     bytes body = 3;
 }
 
@@ -73,17 +73,17 @@ message Metadata  {
 
 ### 1 - Initial PUT
 
-To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/{address}`. 
+To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/{address}`. We refer to this `address` as the PUT address.
 
 * Headers and body MUST NOT be included.
-* Addresses MAY be given in P2PKH [cashaddr](https://www.bitcoincash.org/spec/cashaddr.html) or [base58](https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses) format.
-* Addresses MUST include checksums and prefixes.
+* PUT addresses MAY be given in P2PKH [cashaddr](https://www.bitcoincash.org/spec/cashaddr.html) or [base58](https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses) format.
+* PUT addresses MUST include checksums and prefixes.
 * If a keyserver is accepting payments from the main, test or regtest network they MUST only deem the corresponding addresses valid. This is to avoid confusion and ensure that main and testing networks stay segregated.
-* The address MUST be a valid Bitcoin Cash address.
+* The PUT address MUST be a valid Bitcoin Cash address.
 
 Any failure to meet the above criteria SHOULD be responded to with status code `400` and an appropriate error message.
 
-A successful request MUST be responded to with a status code `402` and the `PaymentRequest` message defined in [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki).
+A successful request MUST be responded to with status code `402` and the `PaymentRequest` message defined in [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and details can be found in the "PaymentDetails/PaymentRequest" section.
 
 ```protobuf
 message PaymentDetails {
@@ -105,9 +105,7 @@ message PaymentRequest {
 }
 ```
 
-Details can be found in the "PaymentDetails/PaymentRequest" section of [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki).
-
-In addition to the [BIP70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements the `merchant_data` field of the `PaymentDetails` message MUST contain the URL? Or can it just contain the address??
+In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements the `merchant_data` field of the `PaymentDetails` message MUST contain the PUT address.
 
 **WIP**
 
@@ -117,7 +115,16 @@ The keyserver MUST incude an `OP_RETURN` output in the `outputs` field given by.
 
 The client sends the payment and the keyserver responds with a payment acknowledgement message, both in accordance to [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki). 
 
-Note that the `merchant_data` in the clients `Payment` message SHOULD be equal to the `merchant_data` in the keyservers `PaymentDetails`. This ensures that the payment is tied to the target address.
+Note that the `merchant_data` in the clients `Payment` message SHOULD be equal to the `merchant_data` in the keyservers `PaymentDetails`.
+
+```protobuf
+message Payment {
+        optional bytes merchant_data = 1;  // From PaymentDetails.merchant_data
+        repeated bytes transactions = 2;   // Signed transactions that satisfy PaymentDetails.outputs
+        repeated Output refund_to = 3;     // Where to send refunds, if a refund is necessary
+        optional string memo = 4;          // Human-readable message for the merchant
+}
+```
 
 In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) the keyserver generates a token string using the following process:
 
@@ -126,23 +133,52 @@ In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070
 3. Encode the raw token using URL safe base64.
 
 This response MUST have status code `202` and include both:
-* The `LOCATION` header `merchant_data?code={token string}` (?? if merchant data is just address then `/keys/merchant_data...` instead??),
-* The `AUTHORIZATION` header `POP {token string}`.
+* A `LOCATION` header `/keys/{merchant_data}?code={token string}`.
+* A `AUTHORIZATION` header `POP {token string}`.
 
 ### 3 - Metadata Submission
 
-The client constructs the `Payload` protobuf message. The `Entry` messages SHOULD contain the items to be uploaded. 
+The client constructs the `Payload` protobuf message. The `Entry` messages SHOULD contain the items to be uploaded.
 
-* The `format` string SHOULD define the data format of the `body` bytes.
+```protobuf
+// Basic key/value used to store header data.
+message Header {
+    string name = 1;
+    string value = 2;
+}
+
+// Entry is an individual piece of structured data provided by wallet authors.
+message Entry {
+    // Format is a hint to wallets as to what type of data to deserialize from the entry.
+    string format = 1;
+    // The headers is excess metadata that may be useful to a wallet.
+    repeated Header headers = 2;
+    // Body of the entry.
+    bytes body = 3;
+}
+
+// Payload is the user-specified data section of a AddressMetadata that is covered by the users signature.
+message Payload {
+    // Timestamp allows servers to determine which version of the data is the most recent.
+    int64 timestamp = 1;
+    // TTL tells us how long this entry should exist before being considered invalid.
+    int64 ttl = 2;
+    // User specified data.  Presumably some conventional data determined by wallet authors.
+    repeated Entry entries = 3;
+}
+```
+
+* The `format` field SHOULD define the data format of the `body` bytes.
 * It is RECOMMENDED that the `header` fields convey information useful for decoding.
 * The `timestamp` field is given in UNIX time (seconds) and, if metadata already exists at the address, MUST be strictly greater than the last `timestamp`.
 * The `ttl` is given in seconds and counts how long after the `timestamp` the server SHOULD expunge the data. It MUST be strictly greater than 0.
 
 The client constructs the `Metadata` protobuf message according to the following requirements:
 
-* The `pub_key` field MUST be a compressed SECP256k1 key and the address the encoded `HASH160` image of it (with appropriate prefix's and checksums).
+* The `pub_key` field MUST be a [compressed SECP256k1 key](http://www.secg.org/sec2-v2.pdf) and the address the encoded `HASH160` image of it (with appropriate prefix's and checksums).
 * The `scheme` field MAY be either `SCHNORR` or `ECDSA` and defines the signature scheme.
-* The `signature` field MUST contain the a compressed signature covering the serialized `Payload`, signed using the private key paired with `pub_key`.
+* The `signature` field MUST contain a compressed signature covering the serialized `Payload`, signed using the private key paired with `pub_key`.
+* The total size of the `Metadata` MUST be strictly smaller than 128 kilobytes.
 
 The client sends the `Metadata` in a PUT request to keyserver on the path `/keys/{address}`. The request MUST include either the query string `code={token string}` or an `AUTHORIZATION` header containing `POP {token string}`.
 
@@ -150,7 +186,7 @@ If any of the requirements are not met the keyserver SHOULD respond with status 
 
 ## Rationale
 
-### BIP70
+### BIP 70
 
 ### Required OP_RETURN Data
 
