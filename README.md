@@ -168,7 +168,7 @@ message Payload {
 }
 ```
 
-* The `format` field SHOULD define the data format of the `body` bytes.
+* The `format` field SHOULD indicate the data type of the `body` bytes.
 * It is RECOMMENDED that the `header` fields convey information useful for decoding.
 * The `timestamp` field is given in UNIX time (seconds) and, if metadata already exists at the address, MUST be strictly greater than the last `timestamp`.
 * The `ttl` is given in seconds and counts how long after the `timestamp` the server SHOULD expunge the data. It MUST be strictly greater than 0.
