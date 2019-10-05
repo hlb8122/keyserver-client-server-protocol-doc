@@ -188,9 +188,15 @@ If any of the requirements are not met the keyserver SHOULD respond with status 
 
 ### BIP 70
 
+The [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) payment protocol is a widely adopted standard. Extending it in this way allows wallet developers to easily integrate the keyserver protocol with minimal work. 
+
+Furthermore, as `merchant_data` contains the PUT address the servers signature covers the address providing some accoutability.
+
 ### Required OP_RETURN Data
 
 ### Statelessness
+
+The protocol has been designed with statelessness in mind. By using tokens it requires no extra state in addition to that needed from [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki).
 
 ### Independence from P2P network protocol
 
