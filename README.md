@@ -19,7 +19,7 @@ It is to be noted that [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-
 The protocol's messages are encoded via [Google's Protocol Buffers](https://developers.google.com/protocol-buffers), authenticated using [X.509 certificates](https://tools.ietf.org/html/rfc5280), and communicated over HTTP/HTTPS.
 
 The protcol consists of three round-trips:
-1. An initial PUT with empty body, responded to by a [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) payment request.
+1. An initial PUT, responded to by a [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) payment request.
 2. A POST containing payment, responded to with a [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) payment acknowledgement and a token.
 3. A PUT containing signed metadata and the token, responded to by a upload acknowledgement.
 
@@ -67,23 +67,23 @@ message Metadata  {
     }
     SignatureScheme scheme = 3;
     // Payload is the metadata set by the user, and covered by the signature.
-    Payload payload = 4;
+    bytes serialized_payload = 4;
 }
 ```
 
 ### 1 - Initial PUT
 
-To initiate the protocol the client sends a PUT request to the keyserver on the path `/keys/{address}`. We refer to this `address` as the PUT address.
+To initiate the protocol the client sends a PUT request to the keyserver at `/keys/{address}`. We refer to this `address` as the PUT address.
 
-* Headers and body MUST NOT be included.
 * PUT addresses MAY be given in P2PKH [cashaddr](https://www.bitcoincash.org/spec/cashaddr.html) or [base58](https://en.bitcoin.it/wiki/Technical_background_of_version_1_Bitcoin_addresses) format.
 * PUT addresses MUST include checksums and prefixes.
 * If a keyserver is accepting payments from the main, test or regtest network they MUST only deem the corresponding addresses valid. This is to avoid confusion and ensure that main and testing networks stay segregated.
 * The PUT address MUST be a valid Bitcoin Cash address.
+* The `AUTHORIZATION` header and query string MUST be absent.
 
 Any failure to meet the above criteria SHOULD be responded to with status code `400` and an appropriate error message.
 
-A successful request MUST be responded to with status code `402` and the `PaymentRequest` message defined in [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and details can be found in the "PaymentDetails/PaymentRequest" section.
+A successful request MUST be responded to with status code `402` ("Payment Required") and the `PaymentRequest` message defined in [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) and details can be found in the "PaymentDetails/PaymentRequest" section.
 
 ```protobuf
 message PaymentDetails {
@@ -105,17 +105,15 @@ message PaymentRequest {
 }
 ```
 
-In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) requirements the `merchant_data` field of the `PaymentDetails` message MUST contain the PUT address.
+The keyserver MUST populate `merchant_data` field of the `PaymentDetails` message, the exact details of this data is left for future specification and are inconsequential to the main flow of the protocol. Post-payment, this data will be signed by the keyserver providing a "proof-of-payment" token to the client in order to authenticate metadata uploads. This is highlighted in more detail in subsequent sections.
 
-**WIP**
-
-The keyserver MUST incude an `OP_RETURN` output in the `outputs` field given by...Rationale for this can be found in later sections.
+A simple scheme, present in the current toy implementation, the `merchant_data` field is populated by the PUT address. Once signed, this provides a reusable token allowing for key updates to that address. Alternatively, the client provides the hash of the payload to be uploaded in the body of the initial PUT and then the keyserver includes a commitment to it, alongside the address, in the `merchant_data` - providing a single-use token.
 
 ### 2 - Payment and Token Issuance
 
-The client sends the payment and the keyserver responds with a payment acknowledgement message, both in accordance to [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki). 
+The client sends the payment in the body of a POST request and the keyserver responds with a payment acknowledgement message, both in accordance to [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki). 
 
-Note that the `merchant_data` in the clients `Payment` message SHOULD be equal to the `merchant_data` in the keyservers `PaymentDetails`.
+Note that the `merchant_data` in the clients `Payment` message SHOULD be equal to the `merchant_data` in the keyservers `PaymentDetails` and that malicious clients may modify the merchant_data, so should be authenticated in some way (for example, signed with a merchant-only key). 
 
 ```protobuf
 message Payment {
@@ -126,19 +124,22 @@ message Payment {
 }
 ```
 
-In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) the keyserver generates a token string using the following process:
+In addition to the [BIP 70](https://github.com/bitcoin/bips/blob/master/bip-0070.mediawiki) procedure, the keyserver generates a token string using the following process:
 
 1. Extract the `merchant_data` from the `Payment` message.
 2. Perform HMAC SHA256 with a private secret to yield the raw token.
 3. Encode the raw token using URL safe base64.
 
 This response MUST have status code `202` and include both:
-* A `LOCATION` header `/keys/{merchant_data}?code={token string}`.
+
+* A `LOCATION` header `{address path}?code={token string}`.
 * A `AUTHORIZATION` header `POP {token string}`.
+
+It is RECOMMENDED that the `merchant_data` is chosen such that the `address path` may be derived from it - avoiding session state.
 
 ### 3 - Metadata Submission
 
-The client constructs the `Payload` protobuf message. The `Entry` messages SHOULD contain the items to be uploaded.
+The client constructs the `Payload` protobuf message.
 
 ```protobuf
 // Basic key/value used to store header data.
@@ -168,21 +169,22 @@ message Payload {
 }
 ```
 
+* The `Entry` messages SHOULD contain the items to be uploaded.
 * The `format` field SHOULD indicate the data type of the `body` bytes.
 * It is RECOMMENDED that the `header` fields convey information useful for decoding.
 * The `timestamp` field is given in UNIX time (seconds) and, if metadata already exists at the address, MUST be strictly greater than the last `timestamp`.
 * The `ttl` is given in seconds and counts how long after the `timestamp` the server SHOULD expunge the data. It MUST be strictly greater than 0.
 
-The client constructs the `Metadata` protobuf message according to the following requirements:
+The client serializes the payload and constructs the `Metadata` protobuf message according to the following requirements:
 
-* The `pub_key` field MUST be a [compressed SECP256k1 key](http://www.secg.org/sec2-v2.pdf) and the address the encoded `HASH160` image of it (with appropriate prefix's and checksums).
+* The `pub_key` field MUST be a [compressed SECP256k1 key](http://www.secg.org/sec2-v2.pdf) public key and the PUT address the encoded `HASH160` image of it (with appropriate prefix's and checksums).
 * The `scheme` field MAY be either `SCHNORR` or `ECDSA` and defines the signature scheme.
-* The `signature` field MUST contain a compressed signature covering the serialized `Payload`, signed using the private key paired with `pub_key`.
+* The `signature` field MUST contain a compressed signature covering the `serialized_payload` bytes, signed using the private key paired with `pub_key`.
 * The total size of the `Metadata` MUST be strictly smaller than 128 kilobytes.
 
-The client sends the `Metadata` in a PUT request to keyserver on the path `/keys/{address}`. The request MUST include either the query string `code={token string}` or an `AUTHORIZATION` header containing `POP {token string}`.
+The client sends the `Metadata` in the body of a PUT request to keyserver at `address path` given in the location header ealier. The request MUST include either the query string `code={token string}` or an `AUTHORIZATION` header containing `POP {token string}`.
 
-If any of the requirements are not met the keyserver SHOULD respond with status code `400` and an appropriate error message. Otherwise, the keyserver MUST respond with status code `200`, an empty body and empty headers.
+If any of the requirements are not met the keyserver SHOULD respond with status code `400` and an appropriate error message. Otherwise, the keyserver MUST respond with status code `200`, an empty body, and empty headers.
 
 ## Rationale
 
